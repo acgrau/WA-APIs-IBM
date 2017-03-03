@@ -32,8 +32,20 @@ var  qsutil = require('querystring');
 var urlutil = require('url');
 var    util = require('util');
 var      fs = require('fs');
-var    path = require("path");
+var    path = require('path');
 var express = require('express');
+
+var readline = require('readline');
+
+// Added by Alfonso
+
+// ########   HANDLE UPLODAED FILES
+var busboy = require('connect-busboy'); //middleware for form/file upload
+var bodyParser = require('body-parser'); //connects bodyParsing middleware
+var formidable = require('formidable');
+// ##########
+
+
 
 var watson_analytics_api_url = 'api.ibm.com';
 var watson_analytics_api_base_path = '/watsonanalytics/run';
@@ -156,7 +168,7 @@ app.get('/demo/upload', function (req, res) {
         });
     });
     var date = new Date();
-    var body = { name : 'YourApplication_' + date.toISOString() };
+    var body = { name : 'CustomApplication_' + date.toISOString() };
     waReq.write(JSON.stringify(body));
     waReq.end();
 });
@@ -192,6 +204,111 @@ function pushDataToDataSet(id, res) {
     waReq.end();
 }
 
+// Create and push data from file to Watson Analytics.
+app.get('/demo/uploadfile', function (req, res) {
+    var request_options = { 
+       'hostname': watson_analytics_api_url,
+       'path': watson_analytics_api_base_path + '/data/v1/datasets',
+       'method': 'POST',
+       'headers': { 
+           'X-IBM-Client-Id' : yourAppKey.client_id, 
+           'X-IBM-Client-Secret' : yourAppKey.client_secret,
+           'Authorization' : 'Bearer ' + access_tokens.token,
+           'Content-Type': 'application/json' }
+    };
+    var waReq = https.request(request_options, function(waRes) {
+        var responseString = '';
+        waRes.on('data', function(data) { responseString += data; });
+        waRes.on('end', function() {
+          var responseObject = JSON.parse(responseString);
+          var fname = req.param('fn');
+	console.log('fn= ' + fname);
+          getDataFromFile(responseObject.id, fname, res);
+        });
+    });
+    var date = new Date();
+    var body = { name : 'CustomApplication' + date.toISOString() };
+    waReq.write(JSON.stringify(body));
+    waReq.end();
+});
+
+// Get the data from a File
+function getDataFromFile(id, filename, res) {
+    var request_options = { 
+       'hostname': watson_analytics_api_url,
+       'path': watson_analytics_api_base_path + '/data/v1/datasets/' + id + '/content',
+       'method': 'PUT',
+       'headers': { 
+           'X-IBM-Client-Id' : yourAppKey.client_id, 
+           'X-IBM-Client-Secret' : yourAppKey.client_secret,
+           'Authorization' : 'Bearer ' + access_tokens.token,
+           'Content-Type': 'text/csv' }
+    };
+    var waReq = https.request(request_options, function(waRes) {
+        var responseString = '';
+        waRes.on('data', function(data) { responseString += data; });
+        waRes.on('end', function() {
+          var apiLocationURI = 'https://watson.analytics.ibmcloud.com';
+          res.writeHead(302, {
+              'Content-Type': 'text/html',
+              'Location': apiLocationURI
+          });  
+          res.end();
+        });
+    });
+
+
+console.log('filename= ' + filename);
+var body = '';
+
+var rl = readline.createInterface({
+      //input : fs.createReadStream('WASampleFile.csv'),
+	input : fs.createReadStream(__dirname + '/files/' + filename),
+      output: process.stdout,
+      terminal: false
+	})
+rl.on('line',function(line){
+     body= body + line + '\n';
+//     console.log('line:' + line); //or parse line
+	})
+rl.on('close', function () {
+	//console.log('Sending: \n' + body);
+	waReq.write(body);
+	waReq.end();
+	});
+
+}
+
+
+app.use(busboy());
+
+/* ========================================================== 
+Create a Route (/upload) to handle the Form submission 
+(handle POST requests to /upload)
+Express v4  Route definition
+============================================================ */
+app.route('/upload')
+	.post(function (req, res, next) {
+
+        var fstream;
+        req.pipe(req.busboy);
+        req.busboy.on('file', function (fieldname, file, filename) {
+            console.log("Uploading: " + filename);
+
+            //Path where image will be uploaded
+            fstream = fs.createWriteStream(__dirname + '/files/' + filename);
+            file.pipe(fstream);
+            fstream.on('close', function () {    
+                console.log("Upload Finished of " + filename);              
+                res.redirect('/demo/uploadfile?fn=' + filename);           //where to go next
+            });
+        });
+    }); 
+
+// ##################################
+
+
+
 var server = http.createServer(app);
 server.listen(application_port);
-console.log('Application running: http://' + application_url + ':' + application_port);
+console.log('CustomApplication running: http://' + application_url + ':' + application_port);

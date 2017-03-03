@@ -2,6 +2,9 @@
   "name": "YourApplication",
   "main": "server.js",
   "dependencies": {
-    "express": "^4.13.4"
+    "body-parser": "^1.16.1",
+    "connect-busboy": "0.0.2",
+    "express": "^4.13.4",
+    "formidable": "^1.1.1"
   }
 }
